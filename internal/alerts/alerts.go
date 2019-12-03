@@ -15,11 +15,10 @@ type metricMonitor struct {
 	ctl             chan bool
 	wg              *sync.WaitGroup
 	broker          *broker.Connection
-	cache           *cache
+	store           *metricStore
 	metric          string
 	operation       string
 	threshold       float64
-	interval        int64
 	currentSeverity message.Severity
 }
 
@@ -69,30 +68,39 @@ func (a *metricMonitor) processMessage(payload []byte) error {
 
 func (a *metricMonitor) processStatMessage(msg *message.StatMessage) error {
 
-	a.cache.Add(
-		Datapoint{
-			Timestamp: time.Now().Unix(),
-			Metric:    a.metric,
-			Value:     msg.Stats[a.metric],
-		},
-	)
+	if val, ok := msg.Stats[a.metric]; ok {
+		log.Println("Metric has value", a.metric, val)
+		a.store.Push(
+			Datapoint{
+				Timestamp: msg.End,
+				Value:     val,
+			},
+		)
+	}
 
 	return nil
 }
 
 func (a *metricMonitor) checkAlert() error {
-	thresholdRaised := a.cache.Mean() > a.threshold
-	text := fmt.Sprintf("High traffic generated an alert - hits = {%.2f}, triggered at {%v}", a.cache.Mean(), time.Now())
+	mean := a.store.Mean()
+	log.Println("MEAN REEIVED", mean)
+	thresholdRaised := mean > a.threshold
 
+	var text string
 	var msg *message.AlertMessage
+
 	if thresholdRaised && a.currentSeverity == message.SeverityCanceled {
 		log.Println("alerts: new alert detected for metric ", a.metric)
-		msg = message.NewAlertMessage(a.metric, text, message.SeverityMax)
+		text = fmt.Sprintf("High traffic generated an alert - hits = {%.2f}, triggered at {%v}", mean, time.Now())
+		a.currentSeverity = message.SeverityMax
+		msg = message.NewAlertMessage(a.metric, text, a.currentSeverity)
 	} else if !thresholdRaised && a.currentSeverity == message.SeverityMax {
 		log.Println("alerts: cancelling alert for metric ", a.metric)
-		msg = message.NewAlertMessage(a.metric, text, message.SeverityCanceled)
+		text = fmt.Sprintf("High traffic alert CANCELED - hits = {%.2f}, at {%v}", mean, time.Now())
+		a.currentSeverity = message.SeverityCanceled
+		msg = message.NewAlertMessage(a.metric, text, a.currentSeverity)
 	} else {
-		log.Println("alerts: nothing to do for alert ", a.metric)
+		log.Println("alerts: nothing to do for alert ", a.metric, mean)
 		return nil
 	}
 
@@ -112,10 +120,10 @@ func Run(wg *sync.WaitGroup, ctl chan bool, metric, operation string, interval i
 		broker:    conn,
 		metric:    metric,
 		operation: operation,
-		interval:  interval,
 		threshold: threshold,
-		cache: &cache{
-			elements: make(Elements, 0),
+		store: &metricStore{
+			points:   make([]Datapoint, 0),
+			interval: interval,
 		},
 	}
 

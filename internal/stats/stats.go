@@ -110,7 +110,8 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 
 func (s *statsMonitor) sendStats() error {
 
-	return s.broker.Send(broker.TopicStat, message.NewStatMessage(s.cache.Stats()))
+	stats, begin, end := s.cache.Stats()
+	return s.broker.Send(broker.TopicStat, message.NewStatMessage(stats, begin, end))
 }
 
 // Run starts stats
@@ -126,6 +127,7 @@ func Run(wg *sync.WaitGroup, ctl chan bool) {
 		broker: conn,
 		cache: &cache{
 			metrics: make(map[string]int),
+			reset:   time.Now().Unix(),
 		},
 	}
 

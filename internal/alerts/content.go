@@ -5,14 +5,14 @@ type SortableContent interface {
 	SortedValue() int64
 }
 
-// Datapoint represents a datapoint
-type Datapoint struct {
+// OldDatapoint represents a datapoint
+type OldDatapoint struct {
 	Timestamp int64
 	Metric    string
 	Value     int
 }
 
 // SortedValue returns the metric timestamp
-func (d Datapoint) SortedValue() int64 {
+func (d OldDatapoint) SortedValue() int64 {
 	return d.Timestamp
 }

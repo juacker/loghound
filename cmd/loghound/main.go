@@ -38,7 +38,7 @@ func main() {
 	go filemon.Run(&wg, ctl)
 	go stats.Run(&wg, ctl)
 
-	go alerts.Run(&wg, ctl, "requests.total", "mean", 120, 10)
+	go alerts.Run(&wg, ctl, "requests.total", "mean", 20, 1)
 
 	<-done
 	log.Println("main: Signal received, stopping goroutines")
