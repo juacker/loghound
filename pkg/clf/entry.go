@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Clf represents a common log format entry
-type Clf struct {
+// Entry represents a common log format entry
+type Entry struct {
 	RemoteHost    string    `json:"remote_host"`
 	RemoteLogname string    `json:"remote_logname"`
 	AuthUser      string    `json:"auth_user"`
@@ -27,7 +27,7 @@ type Request struct {
 var clfParser = regexp.MustCompile(`^(?P<remotehost>\S+) (?P<remotelogname>\S+) (?P<authuser>\S+) \[(?P<date>[^\]]+)\] "(?P<method>[A-Z]+) (?P<path>[^ "]+)? HTTP/[0-9.]+" (?P<status>[0-9]{3}) (?P<bytes>[0-9]+|-)`)
 
 // Parse a Clf entry
-func Parse(s string) (*Clf, error) {
+func Parse(s string) (*Entry, error) {
 	match := clfParser.FindStringSubmatch(s)
 
 	date, err := time.Parse("02/Jan/2006:15:04:05 -0700", match[4])
@@ -45,7 +45,7 @@ func Parse(s string) (*Clf, error) {
 		return nil, fmt.Errorf("fail parsing bytes in common log format: %s", match[8])
 	}
 
-	return &Clf{
+	return &Entry{
 		RemoteHost:    match[1],
 		RemoteLogname: match[2],
 		AuthUser:      match[3],

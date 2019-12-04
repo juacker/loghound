@@ -39,15 +39,6 @@ LOOP:
 		}
 	}
 
-	// close subscribers channels
-	for _, v := range b.subscribers {
-		for _, c := range v {
-			if c != nil {
-				close(c)
-			}
-		}
-	}
-
 	b.wg.Done()
 	return err
 }

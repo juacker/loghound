@@ -81,29 +81,30 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 	status := string(msg.Status)
 
 	// create some counter metrics using message fields
-	// metric: requests.path.<path>
-	s.cache.Increment("requests.path."+rootPath, 1)
-
-	// metric: requests.status.<status>
-	s.cache.Increment("requests.status."+status, 1)
-
-	// metric: requests.method.<method>
-	s.cache.Increment("requests.method."+msg.Request.Method, 1)
 
 	// metric: requests.total
 	s.cache.Increment("requests.total", 1)
 
-	// metric: bytes.path.<path>
-	s.cache.Increment("bytes.path."+rootPath, msg.Bytes)
-
-	// metric: bytes.status.<status>
-	s.cache.Increment("bytes.status."+status, msg.Bytes)
-
-	// metric: bytes.method.<method>
-	s.cache.Increment("bytes.method."+msg.Request.Method, msg.Bytes)
-
 	// metric: bytes.total
 	s.cache.Increment("bytes.total", msg.Bytes)
+
+	// metric: path.<path>.requests
+	s.cache.Increment("path."+rootPath+".requests", 1)
+
+	// metric: path.<path>.bytes
+	s.cache.Increment("path."+rootPath+".bytes", msg.Bytes)
+
+	// metric: status.<status>.requests
+	s.cache.Increment("status."+status+".requests", 1)
+
+	// metric: status.<status>.bytes
+	s.cache.Increment("status."+status+".bytes", msg.Bytes)
+
+	// metric: method.<method>.requests
+	s.cache.Increment("method."+msg.Request.Method+".requests", 1)
+
+	// metric: method.<method>.bytes
+	s.cache.Increment("method."+msg.Request.Method+".bytes", msg.Bytes)
 
 	return nil
 }

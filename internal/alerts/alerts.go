@@ -69,7 +69,6 @@ func (a *metricMonitor) processMessage(payload []byte) error {
 func (a *metricMonitor) processStatMessage(msg *message.StatMessage) error {
 
 	if val, ok := msg.Stats[a.metric]; ok {
-		log.Println("Metric has value", a.metric, val)
 		a.store.Push(
 			Datapoint{
 				Timestamp: msg.End,
@@ -83,7 +82,6 @@ func (a *metricMonitor) processStatMessage(msg *message.StatMessage) error {
 
 func (a *metricMonitor) checkAlert() error {
 	mean := a.store.Mean()
-	log.Println("MEAN REEIVED", mean)
 	thresholdRaised := mean > a.threshold
 
 	var text string
