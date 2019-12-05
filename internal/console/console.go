@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	ui "github.com/gizak/termui/v3"
@@ -41,6 +42,8 @@ LOOP:
 				log.Println("console: failed processing message: ", err)
 			}
 		case <-ticker.C:
+			c.dashboard.AddPoint("requests.total", time.Now().Unix(), rand.Float64())
+			c.dashboard.AddPoint("bytes.total", time.Now().Unix(), rand.Float64())
 			c.dashboard.Render()
 		case e := <-uiEvents:
 			switch e.ID {

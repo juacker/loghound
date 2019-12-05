@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"sync"
 
 	"github.com/juacker/loghound/internal/alerts"
@@ -12,6 +13,15 @@ import (
 )
 
 func main() {
+
+	// print logs to file
+	f, err := os.OpenFile("loghound.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening log file: %v", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
 
 	// goroutines control channel
 	ctl := make(chan bool)
