@@ -2,6 +2,7 @@ package clf
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,10 @@ type Dashboard struct {
 	pathBytesPanel     *widgets.Table
 	messagesPanel      *widgets.List
 	metrics            map[string][]point
+	pathRequests       map[string]float64
+	pathBytes          map[string]float64
+	pathStatus         map[string]float64
+	pathMethods        map[string]float64
 
 	//data
 	messages []string
@@ -72,10 +77,31 @@ func (d *Dashboard) AddPoint(metric string, timestamp int64, value float64) {
 	d.Lock()
 	defer d.Unlock()
 
-	if _, ok := d.metrics[metric]; !ok {
-		d.metrics[metric] = make([]point, 0)
+	// used for top panels
+	if metric == "requests.total" || metric == "bytes.total" {
+		d.metrics[metric] = append(d.metrics[metric], point{timestamp, value})
+	} else {
+		// used for middle panels
+		metricWords := strings.Split(metric, ".")
+		if len(metricWords) == 3 {
+			rootPath := metricWords[1]
+			switch t := metricWords[2]; t {
+			case "requests":
+				d.pathRequests[rootPath] = value
+			case "bytes":
+				d.pathBytes[rootPath] = value
+			}
+		} else if len(metricWords) == 5 {
+			rootPath := metricWords[1]
+			subtype := metricWords[3]
+			switch t := metricWords[4]; t {
+			case "requests":
+				d.pathStatus[strings.Join([]string{rootPath, string(subtype[0]) + "xx"}, ".")] += value
+			case "bytes":
+				d.pathMethods[strings.Join([]string{rootPath, subtype}, ".")] = value
+			}
+		}
 	}
-	d.metrics[metric] = append(d.metrics[metric], point{timestamp, value})
 }
 
 func (d *Dashboard) updateTotalRequestsPanel() {
@@ -139,17 +165,25 @@ func (d *Dashboard) updateTotalBytesPanel() {
 
 func (d *Dashboard) updatePathRequestsPanel() {
 	// path.requests panel at middle left
-	d.pathRequestsPanel.Rows = [][]string{
-		[]string{"Path", "Requests", "2xx", "4xx", "5xx"},
-		[]string{"AAA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"2AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"3AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"4AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"5AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"5AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"5AA", "BBB", "CCC", "DDD", "EEE"},
-		[]string{"5AA", "BBB", "CCC", "DDD", "EEE"},
+	rows := make([][]string, 1)
+	rows[0] = []string{"Path", "Requests", "2xx", "3xx", "4xx", "5xx"}
+
+	for k, v := range d.pathRequests {
+		row := make([]string, 6)
+		row[0] = k
+		row[1] = fmt.Sprintf("%f", v)
+		row[2] = fmt.Sprintf("%f", d.pathStatus[k+".2xx"])
+		row[3] = fmt.Sprintf("%f", d.pathStatus[k+".3xx"])
+		row[4] = fmt.Sprintf("%f", d.pathStatus[k+".4xx"])
+		row[5] = fmt.Sprintf("%f", d.pathStatus[k+".5xx"])
+
+		rows = append(rows, row)
 	}
+
+	// reset after rendering as we aggregate points here
+	d.pathStatus = make(map[string]float64)
+
+	d.pathRequestsPanel.Rows = rows
 	d.pathRequestsPanel.TextStyle = ui.NewStyle(ui.ColorWhite)
 	d.pathRequestsPanel.RowSeparator = false
 	d.pathRequestsPanel.BorderStyle = ui.NewStyle(ui.ColorWhite)
@@ -159,18 +193,23 @@ func (d *Dashboard) updatePathRequestsPanel() {
 }
 
 func (d *Dashboard) updatePathBytesPanel() {
-	// path.bytes panel at middle right
-	d.pathBytesPanel.Rows = [][]string{
-		[]string{"Path", "Bytes", "GET", "POST"},
-		[]string{"AAA", "BBB", "CCC", "DDD"},
-		[]string{"2AA", "BBB", "CCC", "DDD"},
-		[]string{"3AA", "BBB", "CCC", "DDD"},
-		[]string{"4AA", "BBB", "CCC", "DDD"},
-		[]string{"5AA", "BBB", "CCC", "DDD"},
-		[]string{"5AA", "BBB", "CCC", "DDD"},
-		[]string{"5AA", "BBB", "CCC", "DDD"},
-		[]string{"5AA", "BBB", "CCC", "DDD"},
+	rows := make([][]string, 1)
+	rows[0] = []string{"Path", "Bytes", "GET", "POST", "PUT", "DELETE"}
+
+	for k, v := range d.pathBytes {
+		row := make([]string, 6)
+		row[0] = k
+		row[1] = fmt.Sprintf("%f", v)
+		row[2] = fmt.Sprintf("%f", d.pathMethods[k+".GET"])
+		row[3] = fmt.Sprintf("%f", d.pathMethods[k+".POST"])
+		row[4] = fmt.Sprintf("%f", d.pathMethods[k+".PUT"])
+		row[5] = fmt.Sprintf("%f", d.pathMethods[k+".DELETE"])
+
+		rows = append(rows, row)
 	}
+
+	// path.bytes panel at middle right
+	d.pathBytesPanel.Rows = rows
 	d.pathBytesPanel.TextStyle = ui.NewStyle(ui.ColorWhite)
 	d.pathBytesPanel.RowSeparator = false
 	d.pathBytesPanel.BorderStyle = ui.NewStyle(ui.ColorWhite)
@@ -201,6 +240,10 @@ func NewDashboard(width, height int, interval int64) *Dashboard {
 		messagesPanel:      widgets.NewList(),
 		messages:           make([]string, 0),
 		metrics:            make(map[string][]point, 0),
+		pathRequests:       make(map[string]float64),
+		pathBytes:          make(map[string]float64),
+		pathStatus:         make(map[string]float64),
+		pathMethods:        make(map[string]float64),
 	}
 
 	return &d

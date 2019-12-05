@@ -80,7 +80,7 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 	// status
 	status := string(msg.Status)
 
-	// create some counter metrics using message fields
+	// create some metrics
 
 	// metric: requests.total
 	s.cache.Increment("requests.total", 1)
@@ -94,17 +94,11 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 	// metric: path.<path>.bytes
 	s.cache.Increment("path."+rootPath+".bytes", msg.Bytes)
 
-	// metric: status.<status>.requests
-	s.cache.Increment("status."+status+".requests", 1)
+	// metric: path.<path>.status.<status>.requests
+	s.cache.Increment("path."+rootPath+".status."+status+".requests", 1)
 
-	// metric: status.<status>.bytes
-	s.cache.Increment("status."+status+".bytes", msg.Bytes)
-
-	// metric: method.<method>.requests
-	s.cache.Increment("method."+msg.Request.Method+".requests", 1)
-
-	// metric: method.<method>.bytes
-	s.cache.Increment("method."+msg.Request.Method+".bytes", msg.Bytes)
+	// metric: path.<path>.method.<method>.bytes
+	s.cache.Increment("path."+rootPath+".method."+msg.Request.Method+".bytes", msg.Bytes)
 
 	return nil
 }
