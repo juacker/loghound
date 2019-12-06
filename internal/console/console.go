@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"time"
 
 	ui "github.com/gizak/termui/v3"
@@ -36,14 +35,12 @@ LOOP:
 	for {
 		select {
 		case payload := <-c.broker.Receive():
-			log.Println("console: new message received", payload)
+			log.Println("console: new message received")
 			err := c.processMessage(payload)
 			if err != nil {
 				log.Println("console: failed processing message: ", err)
 			}
 		case <-ticker.C:
-			c.dashboard.AddPoint("requests.total", time.Now().Unix(), rand.Float64())
-			c.dashboard.AddPoint("bytes.total", time.Now().Unix(), rand.Float64())
 			c.dashboard.Render()
 		case e := <-uiEvents:
 			switch e.ID {
@@ -59,21 +56,50 @@ LOOP:
 }
 
 func (c *console) processMessage(payload []byte) error {
-	var msg message.CLFMessage
+	var msg message.Message
 	err := json.Unmarshal(payload, &msg)
 	if err != nil {
 		return err
 	}
 
-	// check message is the expected
+	switch t := msg.Type; t {
+	case message.TypeAlert:
+		var alertMsg message.AlertMessage
+		err := json.Unmarshal(payload, &alertMsg)
+		if err != nil {
+			return err
+		}
+		return c.processAlertMessage(&alertMsg)
+	case message.TypeStat:
+		var statMsg message.StatMessage
+		err := json.Unmarshal(payload, &statMsg)
+		if err != nil {
+			return err
+		}
+		return c.processStatMessage(&statMsg)
+	default:
+		log.Println("console: invalid message received")
+		return nil
+	}
+}
+
+func (c *console) processAlertMessage(msg *message.AlertMessage) error {
 	if !msg.IsValid() {
 		return fmt.Errorf("invalid message")
 	}
 
-	return c.processCLFMessage(&msg)
+	c.dashboard.Message(time.Now(), msg.Text)
+	return nil
 }
 
-func (c *console) processCLFMessage(msg *message.CLFMessage) error {
+func (c *console) processStatMessage(msg *message.StatMessage) error {
+	if !msg.IsValid() {
+		return fmt.Errorf("invalid message")
+	}
+
+	for metric, value := range msg.Stats {
+		c.dashboard.AddPoint(metric, msg.End, float64(value))
+	}
 
 	return nil
 }

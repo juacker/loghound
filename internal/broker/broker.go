@@ -28,7 +28,7 @@ LOOP:
 	for {
 		select {
 		case payload := <-b.listener:
-			log.Println("broker: new message received ", payload)
+			log.Println("broker: new message received ")
 			err = b.broadcast(payload)
 			if err != nil {
 				log.Println("broker: error sending broadcast message", err)

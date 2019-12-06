@@ -6,7 +6,13 @@ import (
 	"fmt"
 )
 
-// Connection represents a broker connection
+// Link interface defines a link to a broker
+type Link interface {
+	Send(int, interface{}) error
+	Receive() <-chan []byte
+}
+
+// Connection represents a broker connection. it satisfies Link interface
 type Connection struct {
 	read  <-chan []byte
 	write chan<- []byte

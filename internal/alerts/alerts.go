@@ -14,7 +14,7 @@ import (
 type metricMonitor struct {
 	ctl             chan bool
 	wg              *sync.WaitGroup
-	broker          *broker.Connection
+	broker          broker.Link
 	store           *metricStore
 	metric          string
 	operation       string
@@ -31,7 +31,7 @@ LOOP:
 	for {
 		select {
 		case payload := <-a.broker.Receive():
-			log.Println("alerts: new message received", payload)
+			log.Println("alerts: new message received")
 			err := a.processMessage(payload)
 			if err != nil {
 				log.Println("alerts: failed processing message: ", err)
@@ -69,8 +69,8 @@ func (a *metricMonitor) processMessage(payload []byte) error {
 func (a *metricMonitor) processStatMessage(msg *message.StatMessage) error {
 
 	if val, ok := msg.Stats[a.metric]; ok {
-		a.store.Push(
-			Datapoint{
+		a.store.push(
+			datapoint{
 				Timestamp: msg.End,
 				Value:     val,
 			},
@@ -81,7 +81,7 @@ func (a *metricMonitor) processStatMessage(msg *message.StatMessage) error {
 }
 
 func (a *metricMonitor) checkAlert() error {
-	mean := a.store.Mean()
+	mean := a.store.mean()
 	thresholdRaised := mean > a.threshold
 
 	var text string
@@ -89,12 +89,12 @@ func (a *metricMonitor) checkAlert() error {
 
 	if thresholdRaised && a.currentSeverity == message.SeverityCanceled {
 		log.Println("alerts: new alert detected for metric ", a.metric)
-		text = fmt.Sprintf("High traffic generated an alert - hits = {%.2f}, triggered at {%v}", mean, time.Now())
+		text = fmt.Sprintf("High traffic generated an alert - hits = {%.2f}, triggered at {%v}", mean, time.Now().Truncate(time.Second))
 		a.currentSeverity = message.SeverityMax
 		msg = message.NewAlertMessage(a.metric, text, a.currentSeverity)
 	} else if !thresholdRaised && a.currentSeverity == message.SeverityMax {
 		log.Println("alerts: cancelling alert for metric ", a.metric)
-		text = fmt.Sprintf("High traffic alert CANCELED - hits = {%.2f}, at {%v}", mean, time.Now())
+		text = fmt.Sprintf("High traffic alert CANCELED - hits = {%.2f}, at {%v}", mean, time.Now().Truncate(time.Second))
 		a.currentSeverity = message.SeverityCanceled
 		msg = message.NewAlertMessage(a.metric, text, a.currentSeverity)
 	} else {
@@ -106,7 +106,7 @@ func (a *metricMonitor) checkAlert() error {
 }
 
 // Run starts alerts
-func Run(wg *sync.WaitGroup, ctl chan bool, metric, operation string, interval int64, threshold float64) {
+func Run(wg *sync.WaitGroup, ctl chan bool, metric, operation string, interval int64, threshold int) {
 	conn, err := broker.NewConnection(broker.TopicStat)
 	if err != nil {
 		log.Fatal("alerts: failed opening broker connection ", err)
@@ -118,9 +118,9 @@ func Run(wg *sync.WaitGroup, ctl chan bool, metric, operation string, interval i
 		broker:    conn,
 		metric:    metric,
 		operation: operation,
-		threshold: threshold,
+		threshold: float64(threshold),
 		store: &metricStore{
-			points:   make([]Datapoint, 0),
+			points:   make([]datapoint, 0),
 			interval: interval,
 		},
 	}

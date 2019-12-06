@@ -18,7 +18,7 @@ type fileMonitor struct {
 	sync.Mutex
 	ctl     chan bool
 	wg      *sync.WaitGroup
-	broker  *broker.Connection
+	broker  broker.Link
 	files   []string
 	fd      map[string]*os.File
 	watcher *fsnotify.Watcher
@@ -63,7 +63,7 @@ LOOP:
 	for {
 		select {
 		case event := <-watcher.Events:
-			log.Println("filemon: new event received ", event, event.Name)
+			log.Println("filemon: new event received: ", event, event.Name)
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				f.processFileContents(event.Name)
 
@@ -139,7 +139,7 @@ func (f *fileMonitor) processFileContents(filename string) error {
 }
 
 // Run starts file monitor
-func Run(wg *sync.WaitGroup, ctl chan bool) {
+func Run(wg *sync.WaitGroup, ctl chan bool, filename string) {
 	conn, err := broker.NewConnection()
 	if err != nil {
 		log.Fatal("filemon: failed opening broker connection ", err)
@@ -148,7 +148,7 @@ func Run(wg *sync.WaitGroup, ctl chan bool) {
 	filemon := &fileMonitor{
 		ctl:    ctl,
 		wg:     wg,
-		files:  []string{"/tmp/access.log"},
+		files:  []string{filename}, // to support multiple files in the future
 		fd:     make(map[string]*os.File, 0),
 		broker: conn,
 	}

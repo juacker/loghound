@@ -13,22 +13,23 @@ import (
 )
 
 type statsMonitor struct {
-	ctl    chan bool
-	wg     *sync.WaitGroup
-	broker *broker.Connection
-	cache  *cache
+	ctl      chan bool
+	wg       *sync.WaitGroup
+	interval int64
+	broker   broker.Link
+	cache    *cache
 }
 
 func (s *statsMonitor) loop() {
 	log.Println("stats: initializing stats monitoring")
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(time.Duration(s.interval) * time.Second)
 
 LOOP:
 	for {
 		select {
 		case payload := <-s.broker.Receive():
-			log.Println("stats: new message received", payload)
+			log.Println("stats: new message received")
 			err := s.processMessage(payload)
 			if err != nil {
 				log.Println("stats: failed processing message: ", err)
@@ -78,7 +79,7 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 	}
 
 	// status
-	status := string(msg.Status)
+	status := fmt.Sprintf("%d", msg.Status)
 
 	// create some metrics
 
@@ -110,16 +111,17 @@ func (s *statsMonitor) sendStats() error {
 }
 
 // Run starts stats
-func Run(wg *sync.WaitGroup, ctl chan bool) {
+func Run(wg *sync.WaitGroup, ctl chan bool, interval int64) {
 	conn, err := broker.NewConnection(broker.TopicData)
 	if err != nil {
 		log.Fatal("stats: failed opening broker connection ", err)
 	}
 
 	stats := &statsMonitor{
-		ctl:    ctl,
-		wg:     wg,
-		broker: conn,
+		ctl:      ctl,
+		wg:       wg,
+		broker:   conn,
+		interval: interval,
 		cache: &cache{
 			metrics: make(map[string]int),
 			reset:   time.Now().Unix(),

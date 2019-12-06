@@ -2,6 +2,7 @@ package clf
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,11 @@ import (
 type point struct {
 	Timestamp int64
 	Value     float64
+}
+
+type message struct {
+	Time time.Time
+	Text string
 }
 
 // Dashboard defines a dashboard to show common log format metrics
@@ -30,14 +36,15 @@ type Dashboard struct {
 	pathRequestsPanel  *widgets.Table
 	pathBytesPanel     *widgets.Table
 	messagesPanel      *widgets.List
-	metrics            map[string][]point
-	pathRequests       map[string]float64
-	pathBytes          map[string]float64
-	pathStatus         map[string]float64
-	pathMethods        map[string]float64
 
 	//data
-	messages []string
+	messages     []message
+	metrics      map[string][]point
+	sortedPaths  []string
+	pathRequests map[string]float64
+	pathBytes    map[string]float64
+	pathStatus   map[string]float64
+	pathMethods  map[string]float64
 }
 
 // Resize resizes the dashboard
@@ -49,6 +56,8 @@ func (d *Dashboard) Resize(width, height int) {
 
 // Render renders the dashboard
 func (d *Dashboard) Render() {
+	d.Lock()
+	defer d.Unlock()
 
 	// refresh panels data
 	d.updateTotalRequestsPanel()
@@ -68,8 +77,11 @@ func (d *Dashboard) Render() {
 }
 
 // Message adds a new message to the messages panel
-func (d *Dashboard) Message(t time.Time, message string) {
-	d.messages = append(d.messages, fmt.Sprintf("[%v] %s", t, message))
+func (d *Dashboard) Message(t time.Time, text string) {
+	d.Lock()
+	defer d.Unlock()
+
+	d.messages = append(d.messages, message{t, text})
 }
 
 // AddPoint adds a new point of the correspoinding metric
@@ -82,11 +94,18 @@ func (d *Dashboard) AddPoint(metric string, timestamp int64, value float64) {
 		d.metrics[metric] = append(d.metrics[metric], point{timestamp, value})
 	} else {
 		// used for middle panels
+
 		metricWords := strings.Split(metric, ".")
 		if len(metricWords) == 3 {
 			rootPath := metricWords[1]
+
 			switch t := metricWords[2]; t {
 			case "requests":
+				if _, ok := d.pathRequests[rootPath]; !ok {
+					d.sortedPaths = append(d.sortedPaths, rootPath)
+					sort.Strings(d.sortedPaths)
+				}
+
 				d.pathRequests[rootPath] = value
 			case "bytes":
 				d.pathBytes[rootPath] = value
@@ -96,7 +115,8 @@ func (d *Dashboard) AddPoint(metric string, timestamp int64, value float64) {
 			subtype := metricWords[3]
 			switch t := metricWords[4]; t {
 			case "requests":
-				d.pathStatus[strings.Join([]string{rootPath, string(subtype[0]) + "xx"}, ".")] += value
+				pathStatus := strings.Join([]string{rootPath, string(subtype[0]) + "xx"}, ".")
+				d.pathStatus[pathStatus] += value
 			case "bytes":
 				d.pathMethods[strings.Join([]string{rootPath, subtype}, ".")] = value
 			}
@@ -105,9 +125,6 @@ func (d *Dashboard) AddPoint(metric string, timestamp int64, value float64) {
 }
 
 func (d *Dashboard) updateTotalRequestsPanel() {
-	d.Lock()
-	defer d.Unlock()
-
 	limit := time.Now().Unix() - d.interval
 
 	points := make([][]float64, 1)
@@ -135,9 +152,6 @@ func (d *Dashboard) updateTotalRequestsPanel() {
 }
 
 func (d *Dashboard) updateTotalBytesPanel() {
-	d.Lock()
-	defer d.Unlock()
-
 	limit := time.Now().Unix() - d.interval
 
 	points := make([][]float64, 1)
@@ -168,14 +182,14 @@ func (d *Dashboard) updatePathRequestsPanel() {
 	rows := make([][]string, 1)
 	rows[0] = []string{"Path", "Requests", "2xx", "3xx", "4xx", "5xx"}
 
-	for k, v := range d.pathRequests {
+	for _, p := range d.sortedPaths {
 		row := make([]string, 6)
-		row[0] = k
-		row[1] = fmt.Sprintf("%f", v)
-		row[2] = fmt.Sprintf("%f", d.pathStatus[k+".2xx"])
-		row[3] = fmt.Sprintf("%f", d.pathStatus[k+".3xx"])
-		row[4] = fmt.Sprintf("%f", d.pathStatus[k+".4xx"])
-		row[5] = fmt.Sprintf("%f", d.pathStatus[k+".5xx"])
+		row[0] = p
+		row[1] = fmt.Sprintf("%f", d.pathRequests[p])
+		row[2] = fmt.Sprintf("%f", d.pathStatus[p+".2xx"])
+		row[3] = fmt.Sprintf("%f", d.pathStatus[p+".3xx"])
+		row[4] = fmt.Sprintf("%f", d.pathStatus[p+".4xx"])
+		row[5] = fmt.Sprintf("%f", d.pathStatus[p+".5xx"])
 
 		rows = append(rows, row)
 	}
@@ -196,14 +210,14 @@ func (d *Dashboard) updatePathBytesPanel() {
 	rows := make([][]string, 1)
 	rows[0] = []string{"Path", "Bytes", "GET", "POST", "PUT", "DELETE"}
 
-	for k, v := range d.pathBytes {
+	for _, p := range d.sortedPaths {
 		row := make([]string, 6)
-		row[0] = k
-		row[1] = fmt.Sprintf("%f", v)
-		row[2] = fmt.Sprintf("%f", d.pathMethods[k+".GET"])
-		row[3] = fmt.Sprintf("%f", d.pathMethods[k+".POST"])
-		row[4] = fmt.Sprintf("%f", d.pathMethods[k+".PUT"])
-		row[5] = fmt.Sprintf("%f", d.pathMethods[k+".DELETE"])
+		row[0] = p
+		row[1] = fmt.Sprintf("%f", d.pathBytes[p])
+		row[2] = fmt.Sprintf("%f", d.pathMethods[p+".GET"])
+		row[3] = fmt.Sprintf("%f", d.pathMethods[p+".POST"])
+		row[4] = fmt.Sprintf("%f", d.pathMethods[p+".PUT"])
+		row[5] = fmt.Sprintf("%f", d.pathMethods[p+".DELETE"])
 
 		rows = append(rows, row)
 	}
@@ -219,9 +233,27 @@ func (d *Dashboard) updatePathBytesPanel() {
 }
 
 func (d *Dashboard) updateMessagesPanel() {
+	messages := make([]string, 0)
+
+	limit := time.Now().Add(-time.Duration(d.interval) * time.Second)
+
+	var min int
+	for i := len(d.messages); i > 0; i-- {
+		if d.messages[i-1].Time.Before(limit) {
+			min = i
+			break
+		}
+		messages = append(
+			messages,
+			fmt.Sprintf("[%v] %s", d.messages[i-1].Time.Truncate(time.Second), d.messages[i-1].Text),
+		)
+	}
+
+	d.messages = d.messages[min:]
+
 	d.messagesPanel.Title = "Alerts"
 	d.messagesPanel.SetRect(0, d.height/3+d.height/2, d.width, d.height)
-	d.messagesPanel.Rows = d.messages
+	d.messagesPanel.Rows = messages
 	d.messagesPanel.WrapText = false
 
 }
@@ -238,8 +270,9 @@ func NewDashboard(width, height int, interval int64) *Dashboard {
 		pathRequestsPanel:  widgets.NewTable(),
 		pathBytesPanel:     widgets.NewTable(),
 		messagesPanel:      widgets.NewList(),
-		messages:           make([]string, 0),
+		messages:           make([]message, 0),
 		metrics:            make(map[string][]point, 0),
+		sortedPaths:        make([]string, 0),
 		pathRequests:       make(map[string]float64),
 		pathBytes:          make(map[string]float64),
 		pathStatus:         make(map[string]float64),

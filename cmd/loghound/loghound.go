@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"sync"
@@ -14,12 +15,22 @@ import (
 
 func main() {
 
+	// parse command line arguments
+	logfile := flag.String("l", "/tmp/access.log", "common log format file to monitor")
+	threshold := flag.Int("t", 10, "alarm threshold (req/seq)")
+	alarmInterval := flag.Int64("a", 120, "interval to consider for alarm threshold (s)")
+	statsInterval := flag.Int64("s", 2, "stats interval generation (s)")
+
+	flag.Parse()
+
 	// print logs to file
 	f, err := os.OpenFile("loghound.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening log file: %v", err)
 	}
 	defer f.Close()
+
+	log.Println("writing logs to ./loghound.log file")
 
 	log.SetOutput(f)
 
@@ -31,10 +42,10 @@ func main() {
 	wg.Add(4)
 
 	go broker.Run(&wg, ctl)
-	go filemon.Run(&wg, ctl)
-	go stats.Run(&wg, ctl)
+	go filemon.Run(&wg, ctl, *logfile)
+	go stats.Run(&wg, ctl, *statsInterval)
 
-	go alerts.Run(&wg, ctl, "requests.total", "mean", 20, 1)
+	go alerts.Run(&wg, ctl, "requests.total", "mean", *alarmInterval, *threshold)
 
 	console.Run()
 
