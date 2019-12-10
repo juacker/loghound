@@ -13,22 +13,23 @@ import (
 )
 
 type statsMonitor struct {
-	ctl    chan bool
-	wg     *sync.WaitGroup
-	broker *broker.Connection
-	cache  *cache
+	ctl      chan bool
+	wg       *sync.WaitGroup
+	interval int64
+	broker   broker.Link
+	cache    *cache
 }
 
 func (s *statsMonitor) loop() {
 	log.Println("stats: initializing stats monitoring")
 
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(time.Duration(s.interval) * time.Second)
 
 LOOP:
 	for {
 		select {
 		case payload := <-s.broker.Receive():
-			log.Println("stats: new message received", payload)
+			log.Println("stats: new message received")
 			err := s.processMessage(payload)
 			if err != nil {
 				log.Println("stats: failed processing message: ", err)
@@ -78,32 +79,27 @@ func (s *statsMonitor) processCLFMessage(msg *message.CLFMessage) error {
 	}
 
 	// status
-	status := string(msg.Status)
+	status := fmt.Sprintf("%d", msg.Status)
 
-	// create some counter metrics using message fields
-	// metric: requests.path.<path>
-	s.cache.Increment("requests.path."+rootPath, 1)
-
-	// metric: requests.status.<status>
-	s.cache.Increment("requests.status."+status, 1)
-
-	// metric: requests.method.<method>
-	s.cache.Increment("requests.method."+msg.Request.Method, 1)
+	// create some metrics
 
 	// metric: requests.total
 	s.cache.Increment("requests.total", 1)
 
-	// metric: bytes.path.<path>
-	s.cache.Increment("bytes.path."+rootPath, msg.Bytes)
-
-	// metric: bytes.status.<status>
-	s.cache.Increment("bytes.status."+status, msg.Bytes)
-
-	// metric: bytes.method.<method>
-	s.cache.Increment("bytes.method."+msg.Request.Method, msg.Bytes)
-
 	// metric: bytes.total
 	s.cache.Increment("bytes.total", msg.Bytes)
+
+	// metric: path.<path>.requests
+	s.cache.Increment("path."+rootPath+".requests", 1)
+
+	// metric: path.<path>.bytes
+	s.cache.Increment("path."+rootPath+".bytes", msg.Bytes)
+
+	// metric: path.<path>.status.<status>.requests
+	s.cache.Increment("path."+rootPath+".status."+status+".requests", 1)
+
+	// metric: path.<path>.method.<method>.bytes
+	s.cache.Increment("path."+rootPath+".method."+msg.Request.Method+".bytes", msg.Bytes)
 
 	return nil
 }
@@ -115,16 +111,17 @@ func (s *statsMonitor) sendStats() error {
 }
 
 // Run starts stats
-func Run(wg *sync.WaitGroup, ctl chan bool) {
+func Run(wg *sync.WaitGroup, ctl chan bool, interval int64) {
 	conn, err := broker.NewConnection(broker.TopicData)
 	if err != nil {
 		log.Fatal("stats: failed opening broker connection ", err)
 	}
 
 	stats := &statsMonitor{
-		ctl:    ctl,
-		wg:     wg,
-		broker: conn,
+		ctl:      ctl,
+		wg:       wg,
+		broker:   conn,
+		interval: interval,
 		cache: &cache{
 			metrics: make(map[string]int),
 			reset:   time.Now().Unix(),

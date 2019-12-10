@@ -7,7 +7,7 @@ import (
 // CLFMessage struct
 type CLFMessage struct {
 	Message
-	clf.Clf
+	clf.Entry
 }
 
 // IsValid check if message has the right type
@@ -16,7 +16,7 @@ func (m *CLFMessage) IsValid() bool {
 }
 
 // NewCLFMessage returns a new CLFMessage
-func NewCLFMessage(m *clf.Clf) *CLFMessage {
+func NewCLFMessage(m *clf.Entry) *CLFMessage {
 	return &CLFMessage{
 		Message{TypeCLF},
 		*m,

@@ -28,7 +28,7 @@ LOOP:
 	for {
 		select {
 		case payload := <-b.listener:
-			log.Println("broker: new message received ", payload)
+			log.Println("broker: new message received ")
 			err = b.broadcast(payload)
 			if err != nil {
 				log.Println("broker: error sending broadcast message", err)
@@ -36,15 +36,6 @@ LOOP:
 		case <-b.ctl:
 			log.Println("broker: ctl signal received, exiting")
 			break LOOP
-		}
-	}
-
-	// close subscribers channels
-	for _, v := range b.subscribers {
-		for _, c := range v {
-			if c != nil {
-				close(c)
-			}
 		}
 	}
 

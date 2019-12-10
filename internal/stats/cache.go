@@ -30,7 +30,7 @@ func (c *cache) Stats() (map[string]int, int64, int64) {
 
 	for k, v := range c.metrics {
 		stats[k] = v
-		delete(c.metrics, k)
+		c.metrics[k] = 0
 	}
 
 	return stats, begin, now
